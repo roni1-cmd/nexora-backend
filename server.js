@@ -30,12 +30,21 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    // Validate chat_history format
+    const chatHistory = Array.isArray(req.body.chat_history) ? req.body.chat_history : [];
+    chatHistory.forEach(msg => {
+      if (!msg.role || !msg.message) {
+        throw new Error('Invalid chat_history format: each entry must have role and message');
+      }
+    });
+
     const response = await axios.post(
       'https://api.cohere.ai/v1/chat',
       {
         message: req.body.message,
-        chat_history: req.body.chat_history || [],
-        model: req.body.model || 'command',
+        chat_history: chatHistory,
+        model: 'command',
         preamble: "You are Nexora, an AI assistant created by CoreA Starstoustroupe, an innovative AI startup. You're designed to provide informative, accurate, and engaging responses to a wide variety of queries. Your personality is warm, professional, and slightly witty. You should be helpful, but also concise and to the point.",
         connectors: req.body.connectors || []
       },
@@ -44,7 +53,7 @@ app.post('/api/chat', async (req, res) => {
           Authorization: `Bearer ${COHERE_API_KEY}`,
           'Content-Type': 'application/json',
         },
-        timeout: 10000,
+        timeout: 15000, // Increased timeout
       }
     );
 
@@ -53,13 +62,14 @@ app.post('/api/chat', async (req, res) => {
   } catch (error) {
     console.error('Error calling Cohere API:', {
       message: error.message,
+      code: error.code,
       status: error.response?.status,
       data: error.response?.data,
       headers: error.response?.headers,
     });
     const status = error.response?.status || 500;
-    const errorMessage = error.response?.data?.message || 'Error communicating with Cohere API';
-    res.status(status).json({ error: errorMessage });
+    const errorMessage = error.response?.data?.message || error.message || 'Error communicating with Cohere API';
+    res.status(status).json({ error: errorMessage, details: error.response?.data });
   }
 });
 
@@ -71,7 +81,7 @@ app.use((req, res) => {
 // Error-handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+  res.status(500).json({ error: 'Internal server error', details: err.message });
 });
 
 // Start server
