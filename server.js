@@ -1,35 +1,71 @@
-// Simple Express server with minimal dependencies
 const express = require('express');
 const axios = require('axios');
-const path = require('path');
+const cors = require('cors');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// API key stored here in the server code (not accessible to browser)
-const COHERE_API_KEY = 'NV4mJTHyb8alHuLqJcHtDqjkXAcAMGO3Yk5xTY74';
+// Load environment variables
+require('dotenv').config();
+const COHERE_API_KEY = process.env.COHERE_API_KEY;
 
 // Middleware
+app.use(cors({ origin: '*' })); // Allow all origins for testing
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+
+// Handle root URL
+app.get('/', (req, res) => {
+  res.json({ message: 'Nexora Backend API - Use POST /api/chat for chat requests' });
+});
 
 // Proxy route for Cohere API
 app.post('/api/chat', async (req, res) => {
-  try {
-    const response = await axios.post('https://api.cohere.ai/v1/chat', req.body, {
-      headers: {
-        'Authorization': `Bearer ${COHERE_API_KEY}`,
-        'Content-Type': 'application/json',
-      }
-    });
-    
-    res.json(response.data);
-  } catch (error) {
-    console.error('Error calling Cohere API:', error.message);
-    res.status(500).json({
-      error: 'Error communicating with Cohere API'
-    });
+  if (!req.body.message) {
+    return res.status(400).json({ error: 'Missing "message" in request body' });
   }
+
+  if (!COHERE_API_KEY) {
+    return res.status(500).json({ error: 'Cohere API key not configured' });
+  }
+
+  try {
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    const response = await axios.post(
+      'https://api.cohere.ai/v1/chat',
+      req.body,
+      {
+        headers: {
+          Authorization: `Bearer ${COHERE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      }
+    );
+
+    console.log('Cohere response:', response.status, JSON.stringify(response.data, null, 2));
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Error calling Cohere API:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      headers: error.response?.headers,
+    });
+    const status = error.response?.status || 500;
+    const errorMessage = error.response?.data?.message || 'Error communicating with Cohere API';
+    res.status(status).json({ error: errorMessage });
+  }
+});
+
+// Catch-all for undefined routes
+app.use((req, res) => {
+  res.status(404).json({ error: '404: Endpoint not found' });
+});
+
+// Error-handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err.stack);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start server
