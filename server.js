@@ -18,6 +18,30 @@ app.get('/', (req, res) => {
   res.json({ message: 'Nexora Backend API by CoreA Starstoustroupe - Use POST /api/chat for chat requests' });
 });
 
+// Retry logic for Cohere API
+async function callCohereAPI(data, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await axios.post(
+        'https://api.cohere.ai/v1/chat',
+        data,
+        {
+          headers: {
+            Authorization: `Bearer ${COHERE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000, // Increased to 30 seconds
+        }
+      );
+      return response;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      console.log(`Retry ${i + 1}/${retries} failed: ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 // Proxy route for Cohere API
 app.post('/api/chat', async (req, res) => {
   if (!req.body.message) {
@@ -30,32 +54,24 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     console.log('Request body:', JSON.stringify(req.body, null, 2));
-    
+
     // Validate chat_history format
     const chatHistory = Array.isArray(req.body.chat_history) ? req.body.chat_history : [];
-    chatHistory.forEach(msg => {
+    chatHistory.forEach((msg, index) => {
       if (!msg.role || !msg.message) {
-        throw new Error('Invalid chat_history format: each entry must have role and message');
+        throw new Error(`Invalid chat_history at index ${index}: must have role and message`);
       }
     });
 
-    const response = await axios.post(
-      'https://api.cohere.ai/v1/chat',
-      {
-        message: req.body.message,
-        chat_history: chatHistory,
-        model: 'command',
-        preamble: "You are Nexora, an AI assistant created by CoreA Starstoustroupe, an innovative AI startup. You're designed to provide informative, accurate, and engaging responses to a wide variety of queries. Your personality is warm, professional, and slightly witty. You should be helpful, but also concise and to the point.",
-        connectors: req.body.connectors || []
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${COHERE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000, // Increased timeout
-      }
-    );
+    const data = {
+      message: req.body.message,
+      chat_history: chatHistory,
+      model: 'command',
+      preamble: "You are Nexora, an AI assistant created by CoreA Starstoustroupe, an innovative AI startup. You're designed to provide informative, accurate, and engaging responses to a wide variety of queries. Your personality is warm, professional, and slightly witty. You should be helpful, but also concise and to the point.",
+      connectors: req.body.connectors || []
+    };
+
+    const response = await callCohereAPI(data);
 
     console.log('Cohere response:', response.status, JSON.stringify(response.data, null, 2));
     res.status(response.status).json(response.data);
@@ -69,7 +85,7 @@ app.post('/api/chat', async (req, res) => {
     });
     const status = error.response?.status || 500;
     const errorMessage = error.response?.data?.message || error.message || 'Error communicating with Cohere API';
-    res.status(status).json({ error: errorMessage, details: error.response?.data });
+    res.status(status).json({ error: errorMessage, details: error.response?.data || error.message });
   }
 });
 
