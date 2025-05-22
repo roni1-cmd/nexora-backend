@@ -33,8 +33,11 @@ app.post('/api/chat', async (req, res) => {
     const response = await axios.post(
       'https://api.cohere.ai/v1/chat',
       {
-        ...req.body,
-        preamble: req.body.preamble || "You are Nexora, an AI assistant created by CoreA Starstoustroupe, an innovative AI startup. You're designed to provide informative, accurate, and engaging responses to a wide variety of queries. Your personality is warm, professional, and slightly witty. You should be helpful, but also concise and to the point."
+        message: req.body.message,
+        chat_history: req.body.chat_history || [],
+        model: req.body.model || 'command',
+        preamble: "You are Nexora, an AI assistant created by CoreA Starstoustroupe, an innovative AI startup. You're designed to provide informative, accurate, and engaging responses to a wide variety of queries. Your personality is warm, professional, and slightly witty. You should be helpful, but also concise and to the point.",
+        connectors: req.body.connectors || []
       },
       {
         headers: {
