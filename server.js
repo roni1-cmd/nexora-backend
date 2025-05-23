@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const admin = require('firebase-admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,9 +10,31 @@ const PORT = process.env.PORT || 3000;
 require('dotenv').config();
 const COHERE_API_KEY = process.env.COHERE_API_KEY;
 
+// Initialize Firebase Admin (optional, uncomment when ready)
+// const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
+// admin.initializeApp({
+//   credential: admin.credential.cert(serviceAccount)
+// });
+
 // Middleware
-app.use(cors({ origin: '*' })); // Allow all origins for testing
+app.use(cors({ origin: '*' })); // Update to your GitHub Pages URL in production
 app.use(express.json());
+
+// Optional Firebase token verification (uncomment when ready)
+// async function verifyToken(req, res, next) {
+//   const idToken = req.headers.authorization?.split('Bearer ')[1];
+//   if (!idToken) {
+//     return res.status(401).json({ error: 'Unauthorized: No ID token provided' });
+//   }
+//   try {
+//     const decodedToken = await admin.auth().verifyIdToken(idToken);
+//     req.user = decodedToken;
+//     next();
+//   } catch (error) {
+//     console.error('Token verification error:', error.message);
+//     return res.status(401).json({ error: 'Unauthorized: Invalid ID token' });
+//   }
+// }
 
 // Handle root URL
 app.get('/', (req, res) => {
@@ -30,19 +53,20 @@ async function callCohereAPI(data, retries = 3, delay = 1000) {
             Authorization: `Bearer ${COHERE_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          timeout: 30000, // Increased to 30 seconds
+          timeout: 30000, // 30s timeout
         }
       );
       return response;
     } catch (error) {
-      if (i === retries - 1) throw error;
       console.log(`Retry ${i + 1}/${retries} failed: ${error.message}`);
+      if (i === retries - 1) throw error;
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
 }
 
 // Proxy route for Cohere API
+// app.post('/api/chat', verifyToken, async (req, res) => { // Uncomment when Firebase auth is enabled
 app.post('/api/chat', async (req, res) => {
   if (!req.body.message) {
     return res.status(400).json({ error: 'Missing "message" in request body' });
@@ -67,7 +91,7 @@ app.post('/api/chat', async (req, res) => {
       message: req.body.message,
       chat_history: chatHistory,
       model: 'command',
-      preamble: "You are Nexora, an AI assistant created by CoreA Starstoustroupe, an innovative AI startup. You're designed to provide informative, accurate, and engaging responses to a wide variety of queries. Your personality is warm, professional, and slightly witty. You should be helpful, but also concise and to the point.",
+      preamble: "You are Nexora, developed by Ron Asnahon, founder of tech AI startup CoreA Starstoustroupe, with headquarters in his tiny room, started in Feb 2025. You're designed to provide informative, accurate, and engaging responses to a wide variety of queries. Your personality is warm, professional, and slightly witty. You should be helpful, but also concise and to the point.",
       connectors: req.body.connectors || []
     };
 
